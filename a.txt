@@ -1,0 +1,9 @@
+a.txt
+b.txt
+console.cpp
+core.h
+functions.cpp
+Makefile
+prueba
+shell.exe
+cat: a: No such file or directory

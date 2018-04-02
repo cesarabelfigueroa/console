@@ -10,7 +10,7 @@
 using namespace std;
 
 
-PipeRedirect parse_command(int argc, char** argv, char** cmd1, char** cmd2) {
+PipeRedirect parse_command(int argc, char** argv, char** cmd1, char** cmd2,  char** err) {
   PipeRedirect result = NEITHER;
   int split = -1;
 
@@ -20,6 +20,9 @@ PipeRedirect parse_command(int argc, char** argv, char** cmd1, char** cmd2) {
       split = i;
     } else if (strcmp(argv[i], ">>") == 0) {
       result = REDIRECT;
+      split = i;
+    } else if (strcmp(argv[i], ">") == 0) {
+      result = REDIRECT_OVERWRITE;
       split = i;
     }
   }
@@ -31,13 +34,21 @@ PipeRedirect parse_command(int argc, char** argv, char** cmd1, char** cmd2) {
     }
 
     int count = 0;
+    int count2 = 0;
     for (int i=split+1; i<argc; i++) {
       cmd2[count] = argv[i];
       count++;
     }
-
+    for (int i=count+split; i<argc; i++) {
+      err[count2] = argv[i];
+      count2++;
+    }
+    if(strcmp(cmd2[0], err[0])==0){
+      err[0]= (char*)"x";
+    }
     cmd1[split] = NULL;
     cmd2[count] = NULL;
+    err[count2] = NULL;
   }
 
   return result;
@@ -95,11 +106,11 @@ int read_args(char **argv) {
   return argc;
 }
 
-void redirect_cmd(char** cmd, char** file) {
+void redirect_cmd(char** cmd, char** file, char** err) {
   int fds[2]; 
   int count;  
   int fd;     
-  char c;     
+  char c[2];     
   pid_t pid; 
 
   pipe(fds);
@@ -114,17 +125,24 @@ void redirect_cmd(char** cmd, char** file) {
     }
 
     dup2(fds[0], 0);
-
+    
     close(fds[1]);
-
-     while ((count = read(0, &c, 1)) > 0)
-      write(fd, &c, 1); 
+    read(fd, c, 10000);
+     while ((count = read(0, c, 1)) > 0){
+      write(fd, c, 1); 
+      cout<< "Hey";
+     }
 
     execlp("echo", "echo", NULL);
 
  } else if ((pid = fork()) == 0) {
+    
+    if(strcmp(err[0], "2>&1")==0){
+      dup2(fds[1], 2);
+    }
+    
     dup2(fds[1], 1);
-
+    
     close(fds[0]);
 
     execvp(cmd[0], cmd);
@@ -137,6 +155,49 @@ void redirect_cmd(char** cmd, char** file) {
   }
 }
 
+void redirect_overwrite_cmd(char** cmd, char** file, char** err) {
+  int fds[2]; 
+  int count;  
+  int fd;     
+  char c[1];     
+  pid_t pid; 
+  
+  pipe(fds);
+
+  if (fork() == 0) {
+    remove(file[0]);
+    fd = open(file[0], O_RDWR | O_CREAT, 0666);
+
+    if (fd < 0) {
+      printf("Error: %s\n", strerror(errno));
+      return;
+    }
+
+    dup2(fds[0], 0);
+    
+    close(fds[1]);
+    write(fd, c, 0); 
+     while ((count = read(0, c, 1)) > 0)
+      write(fd, c, 1); 
+
+    execlp("echo", "echo", NULL);
+
+ } else if ((pid = fork()) == 0) {
+    if(strcmp(err[0], "2>&1")==0){
+      dup2(fds[1], 2);
+    }
+    dup2(fds[1], 1);
+    close(fds[0]);
+
+    execvp(cmd[0], cmd);
+    perror("execvp failed");
+
+  } else {
+    waitpid(pid, NULL, 0);
+    close(fds[0]);
+    close(fds[1]);
+  }
+}
 
 void run_cmd(int argc, char** argv) {
   pid_t pid;
