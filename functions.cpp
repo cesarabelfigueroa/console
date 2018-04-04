@@ -136,12 +136,16 @@ void redirect_cmd(char** cmd, char** file, char** err) {
     execlp("echo", "echo", NULL);
 
  } else if ((pid = fork()) == 0) {
-    
+    dup2(fds[1], 1);
+
     if(strcmp(err[0], "2>&1")==0){
       dup2(fds[1], 2);
+    }else if(strcmp(err[0], ">&2")==0){
+     
+      dup2(2, 1);
     }
     
-    dup2(fds[1], 1);
+    
     
     close(fds[0]);
 
@@ -183,10 +187,13 @@ void redirect_overwrite_cmd(char** cmd, char** file, char** err) {
     execlp("echo", "echo", NULL);
 
  } else if ((pid = fork()) == 0) {
+    dup2(fds[1], 1);
     if(strcmp(err[0], "2>&1")==0){
       dup2(fds[1], 2);
+    }else if(strcmp(err[0], ">&2")==0){
+      dup2(2, 1);
     }
-    dup2(fds[1], 1);
+    
     close(fds[0]);
 
     execvp(cmd[0], cmd);
